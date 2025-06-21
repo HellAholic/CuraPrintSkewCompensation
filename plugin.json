@@ -1,0 +1,11 @@
+{
+  "name": "Print Skew Compensation",
+  "author": "HellAholic, GregValiant",
+  "version": "2.0.0",
+  "description": "Compensates for XY, XZ, and YZ skew by modifying the model pre-slice or the G-code post-slice, or by providing Marlin/Klipper commands.",
+  "api": 8,
+  "supported_sdk_versions": ["8.7.0", "8.8.0", "8.9.0"],
+  "i18n-catalog": "cura",
+  "extension_id": "PrintSkewCompensation",
+  "settings": {}
+}
