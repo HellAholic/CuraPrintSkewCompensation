@@ -41,15 +41,6 @@ class GCodeManager:
                 self._logger.log("w", f"{self._plugin_id}: Top container in stack is not an InstanceContainer.")
                 return None
         
-        # Ensure machine_start_gcode property exists
-        if not settings_container.hasProperty(key=self._starg_gcode_key, property_name="value"):
-            self._logger.log("i", f"{self._plugin_id}: '{self._starg_gcode_key}' property not found in container '{settings_container.getId()}'. Initializing it.")
-            try:
-                settings_container.setProperty(self._starg_gcode_key, "value", "")
-                self._logger.log("i", f"{self._plugin_id}: Successfully initialized '{self._starg_gcode_key}' for '{settings_container.getId()}'.")
-            except Exception as e:
-                self._logger.logException("e", f"{self._plugin_id}: Failed to initialize '{self._starg_gcode_key}' for '{settings_container.getId()}': {e}")
-                return None # Cannot proceed if initialization fails
         return settings_container
 
     def sync_start_gcode(self, skew_calculator: "SkewCalculator", method: str, marlin_add: bool, klipper_add: bool):
@@ -75,12 +66,13 @@ class GCodeManager:
             return
 
         try:
-            current_start_gcode = settings_container.getProperty(self._starg_gcode_key, "value")
-            if current_start_gcode is None: # Should be initialized by _find_current_settings_container
-                self._logger.log("w", f"{self._plugin_id}: '{self._starg_gcode_key}' is None after attempting to initialize/get. Using empty string.")
+            # Get property from the global stack to ensure we get inherited values
+            current_start_gcode = global_stack.getProperty(self._starg_gcode_key, "value")
+            if current_start_gcode is None:
+                self._logger.log("w", f"{self._plugin_id}: '{self._starg_gcode_key}' is None in the global stack. Using empty string.")
                 current_start_gcode = ""
         except Exception as e:
-             self._logger.logException("e", f"{self._plugin_id}: Error getting current start G-code: {e}")
+             self._logger.logException("e", f"{self._plugin_id}: Error getting current start G-code from global stack: {e}")
              return
 
         # Get potential commands based on current calculator state
