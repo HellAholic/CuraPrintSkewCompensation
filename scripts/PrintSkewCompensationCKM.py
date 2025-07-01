@@ -298,7 +298,7 @@ class PrintSkewCompensationCKM(Script):
             f";    yz_ad_measurement: {self._plugin_settings.get('yz_ad_measurement')}\n"
             f";        YZ skew factor:    {round(self._calculated_factors['yz'], 8)}\n"
         )
-        data.append(setting_string)
+        data[len(data) - 1] += setting_string
 
         return data
 
