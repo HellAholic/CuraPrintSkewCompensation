@@ -338,7 +338,7 @@ class PrintSkewCompensationCKM(Script):
         cur_x = 0
         cur_y = 0
         cur_z = 0
-        for layer_index, layer in enumerate(cura_data):
+        for layer_index, layer in enumerate(cura_data[:-1]):
             lines = layer.split("\n")
 
             # Get the X, Y, Z locations
