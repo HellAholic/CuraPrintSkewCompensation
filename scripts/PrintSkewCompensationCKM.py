@@ -338,7 +338,10 @@ class PrintSkewCompensationCKM(Script):
         cur_x = 0
         cur_y = 0
         cur_z = 0
-        for layer_index, layer in enumerate(cura_data):
+        for layer_index, layer in enumerate(cura_data[:-1]):
+            if layer_index < 2:
+                continue
+            
             lines = layer.split("\n")
 
             # Get the X, Y, Z locations
@@ -364,10 +367,6 @@ class PrintSkewCompensationCKM(Script):
                     x_out = round(x_input - y_input * self._calculated_factors["xy"], 3)
                     x_out = round(x_out - z_input * self._calculated_factors["xz"], 3)
                     y_out = round(y_input - z_input * self._calculated_factors["yz"], 3)
-
-                    # If the first layer hasn't started then jump out (after tracking the XYZ).
-                    if layer_index < 2:
-                        continue
 
                     # Alter the current line
                     if cur_x != None:
