@@ -38,6 +38,7 @@ class PluginController(Extension):
         self.pp_script_checkbox_state = False
 
         self._global_container_stack = None
+        self._last_printer_was_none = False  # Track printer state to reduce logging spam
         self._connect_to_global_stack_metadata()
         Application.getInstance().globalContainerStackChanged.connect(self._handle_global_container_stack_changed)
 
@@ -45,17 +46,14 @@ class PluginController(Extension):
 
         self._update_internal_state_from_printer_config()
 
-        action_open_menu = self.addMenuItem(catalog.i18n("Calibrate Skew..."), self._show_plugin_menu_dialog)
-        if not action_open_menu:
-            Logger.log("e", f"{PluginConstants.PLUGIN_ID}: Failed to create 'Open Plugin Menu' menu item action.")
+        self.addMenuItem(catalog.i18n("Calibrate Skew..."), self._show_plugin_menu_dialog)
 
         if self._preferences:
             self._preferences.preferenceChanged.connect(self._on_preference_changed)
         else:
-            Logger.log("w", f"{PluginConstants.PLUGIN_ID}: Could not get preferences instance to connect signal.")
+            Logger.log("e", f"{PluginConstants.PLUGIN_ID}: Could not get preferences instance to connect signal.")
 
         PluginConstants.get_operating_system()
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: PluginController Initialized for {PluginConstants.CURRENT_OS} OS.")
 
     # Handlers for reading/writing printer settings
 
@@ -81,14 +79,12 @@ class PluginController(Extension):
         """Reads printer settings from the plugin's configuration file for the given printer name."""
         cfg_path = self._get_printer_cfg_path(printer_name)
         if not os.path.exists(cfg_path):
-            Logger.log("w", f"{PluginConstants.PLUGIN_ID}: Printer settings file does not exist: {cfg_path}. Using default settings.")
             return self._get_default_settings()
 
         config = configparser.ConfigParser()
         config.read(cfg_path)
 
         if 'settings' not in config:
-            Logger.log("w", f"{PluginConstants.PLUGIN_ID}: No 'settings' section found in {cfg_path}. Using default settings.")
             return self._get_default_settings()
 
         settings = {k: v for k, v in config['settings'].items()}
@@ -139,9 +135,12 @@ class PluginController(Extension):
         default_settings = self._get_default_settings()
 
         if not printer_name:
-            Logger.log("w", f"{PluginConstants.PLUGIN_ID}: No printer selected, using default settings.")
+            # Only log once, when the state actually changes
+            if not hasattr(self, '_last_printer_was_none') or not self._last_printer_was_none:
+                self._last_printer_was_none = True
             current_settings_source = default_settings # Use defaults directly, types are correct
         else:
+            self._last_printer_was_none = False
             current_settings_source = self._read_printer_settings_from_file(printer_name)
 
         # Helper to get a value and convert if it's a string, falling back to default typed value
@@ -160,16 +159,13 @@ class PluginController(Extension):
                     else: # Fallback for unexpected types, try direct conversion
                         return target_type(value_from_source)
                 except ValueError:
-                    Logger.log("w", f"{PluginConstants.PLUGIN_ID}: Invalid value '{value_from_source}' for '{key_name}'. Using default: {default_typed_value_from_schema}")
                     return default_typed_value_from_schema
             elif isinstance(value_from_source, target_type):
                 return value_from_source
             else:
                 try:
-                    Logger.log("d", f"{PluginConstants.PLUGIN_ID}: Value for '{key_name}' is of type {type(value_from_source)}, attempting cast to {target_type}.")
                     return target_type(value_from_source)
                 except Exception as e:
-                    Logger.log("w", f"{PluginConstants.PLUGIN_ID}: Could not convert value '{value_from_source}' for '{key_name}' to {target_type}. Error: {e}. Using default: {default_typed_value_from_schema}")
                     return default_typed_value_from_schema
 
         self.enabled = get_typed_value("compensation_enabled", default_settings["compensation_enabled"])
@@ -205,7 +201,6 @@ class PluginController(Extension):
         self._update_plugin_menu_dialog_state()
         printer_name = self._get_current_printer_name()
         if not printer_name:
-            Logger.log("w", f"{PluginConstants.PLUGIN_ID}: No printer selected, cannot save settings.")
             return
         settings = {
             "compensation_enabled": self.enabled,
@@ -235,7 +230,7 @@ class PluginController(Extension):
             try:
                 self._global_container_stack.metaDataChanged.disconnect(self._on_global_metadata_changed)
             except TypeError:
-                Logger.log("w", f"{PluginConstants.PLUGIN_ID}: Error disconnecting from old global_container_stack.metaDataChanged; was it connected?")
+                pass  # Connection didn't exist
             except Exception as e:
                 Logger.logException("e", f"{PluginConstants.PLUGIN_ID}: Unexpected error disconnecting from old global_container_stack: {e}")
 
@@ -245,17 +240,15 @@ class PluginController(Extension):
         if self._global_container_stack:
             try:
                 self._global_container_stack.metaDataChanged.connect(self._on_global_metadata_changed)
-                Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Connected listener to global_container_stack.metaDataChanged.")
                 # Trigger a check to sync state immediately after connecting/reconnecting
                 self._on_global_metadata_changed()
             except Exception as e:
                 Logger.logException("e", f"{PluginConstants.PLUGIN_ID}: Failed to connect to global_container_stack.metaDataChanged: {e}")
         else:
-            Logger.log("w", f"{PluginConstants.PLUGIN_ID}: No global_container_stack available to connect metaDataChanged listener.")
+            pass  # No stack available during startup is normal
 
     def _handle_global_container_stack_changed(self):
         """Handles the global container stack changing."""
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Global container stack has changed. Re-evaluating metadata listener connection.")
         self._connect_to_global_stack_metadata()
 
     def _on_global_metadata_changed(self): # Signature changed: no key argument
@@ -263,14 +256,15 @@ class PluginController(Extension):
         self._update_plugin_menu_dialog_state()
 
     def _on_preference_changed(self, *args):  # Add *args to accept any additional arguments
-        self._update_internal_state_from_printer_config()
+        # Avoid unnecessary updates during startup when no printer is selected
+        if self._get_current_printer_name():
+            self._update_internal_state_from_printer_config()
 
     def _show_plugin_menu_dialog(self):
         """Displays the main plugin menu dialog."""
         # --- Check actual script state and update internal state/preference ---
         actual_script_state = self._is_post_processing_script_active()
         if self.pp_script_checkbox_state != actual_script_state:
-            Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Actual PP script state ({actual_script_state}) differs from saved state ({self.pp_script_checkbox_state}). Updating.")
             self.pp_script_checkbox_state = actual_script_state
         # --- End check ---
 
@@ -333,7 +327,7 @@ class PluginController(Extension):
                 self.pp_script_checkbox_state = is_active  # Update internal state
                 return is_active
             else:
-                Logger.log("w", f"{PluginConstants.PLUGIN_ID}: Could not get PostProcessingPlugin instance to check active scripts.")
+                pass  # PostProcessingPlugin not available
         except Exception as e:
             Logger.logException("e", f"{PluginConstants.PLUGIN_ID}: Error checking active post-processing scripts: {e}")
         self.pp_script_checkbox_state = False  # Reset state if we can't determine it
@@ -342,7 +336,6 @@ class PluginController(Extension):
     def _ensure_pp_script_state(self, target_state: bool) -> bool:
         """Adds or removes the PP script to match the target state."""
         script_key = PluginConstants.POST_PROCESSING_SCRIPT_NAME
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Ensuring PP script '{script_key}' state is {target_state}.")
         try:
             post_processing_plugin = Application.getInstance().getPluginRegistry().getPluginObject("PostProcessingPlugin")
             if not post_processing_plugin:
@@ -367,7 +360,6 @@ class PluginController(Extension):
                     # Move the newly added script to index 0, one step at a time
                     for current_index in range(len(active_script_keys) - 1, 0, -1):
                         post_processing_plugin.moveScript(current_index, current_index - 1)
-                    Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Added script '{script_key}' to active post-processing list.")
                     return True
                 else:
                     Logger.log("e", f"{PluginConstants.PLUGIN_ID}: Script '{script_key}' not found in loaded scripts. Cannot add.")
@@ -377,7 +369,6 @@ class PluginController(Extension):
             elif not target_state and is_currently_active:
                 post_processing_plugin.removeScriptByIndex(current_index)
                 post_processing_plugin.writeScriptsToStack()
-                Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Removed script '{script_key}' from active post-processing list.")
                 return True
             else:
                 return True # State already correct
@@ -411,7 +402,6 @@ class PluginController(Extension):
         )
 
     def _handle_add_marlin_gcode_request(self, enable: bool):
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Manual request to add Marlin G-code to start script.")
         if not self.enabled:
             Message(text=catalog.i18n("Skew compensation is currently disabled. Marlin G-code will not be active until enabled."),
                     lifetime=10,
@@ -443,7 +433,6 @@ class PluginController(Extension):
 
 
     def _handle_add_klipper_gcode_request(self, enable: bool):
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Manual request to add Klipper G-code to start script.")
         if not self.enabled:
             Message(text=catalog.i18n("Skew compensation is currently disabled. Klipper G-code will not be active until enabled."),
                     lifetime=10,
@@ -474,7 +463,6 @@ class PluginController(Extension):
 
     def _handle_toggle_post_processing_script(self, enable: bool):
         script_key = PluginConstants.POST_PROCESSING_SCRIPT_NAME
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Request to {'enable' if enable else 'disable'} post-processing script '{script_key}'. Current checkbox state: {self.pp_script_checkbox_state}")
         if not self.enabled:
             Message(text=catalog.i18n("Skew compensation is currently disabled. Post Processing G-code will not be active until enabled."),
                     title=catalog.i18n("[Print Skew Compensation]"),
@@ -504,7 +492,6 @@ class PluginController(Extension):
         self._save_current_settings()
 
     def _on_plugin_menu_dialog_finished(self, result):
-        Logger.log("i", f"Plugin menu dialog finished with result: {result}")
         self._plugin_menu_dialog_instance = None
 
     def _show_measurement_dialog(self):
@@ -521,7 +508,6 @@ class PluginController(Extension):
         self._measurement_dialog_instance.activateWindow()
 
     def _on_dialog_settings_saved(self):
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: Measurement dialog settings saved.")
         self._save_current_settings()
         if self.enabled:
             self._gcode_manager.sync_start_gcode(
@@ -535,7 +521,6 @@ class PluginController(Extension):
         self._update_plugin_menu_dialog_state()
 
     def _on_dialog_finished(self, result):
-        Logger.log("i", f"Measurement dialog finished with result: {result}")
         self._measurement_dialog_instance = None
 
     def _load_single_model(self, model_path: str) -> bool:
@@ -544,11 +529,7 @@ class PluginController(Extension):
             return False
         try:
             file_url = QUrl.fromLocalFile(model_path)
-            success = self._application.readLocalFile(file_url)
-            if success:
-                Logger.log("i", f"readLocalFile returned True for: {model_path}")
-            else:
-                Logger.log("w", f"readLocalFile returned False for: {model_path}. Model might still load asynchronously.")
+            self._application.readLocalFile(file_url)
             return True
         except Exception as e:
             Logger.logException("e", f"Error calling readLocalFile for model {model_path}: {e}")
@@ -591,10 +572,8 @@ class PluginController(Extension):
                     title=catalog.i18n("[Print Skew Compensation]"),
                     message_type=Message.MessageType.NEUTRAL).show()
         elif success_count > 0:
-            Logger.log("w", f"Initiated loading for {success_count}/{total_expected} model(s) of type '{model_type}', but failed for: {', '.join(failed_models)}")
             Message(text=("Some calibration models failed to load: {failed_list}").format(failed_list=', '.join(failed_models)), title=catalog.i18n("[Print Skew Compensation] Warning"), parent=parent_widget).show()
         else:
-            Logger.log("e", f"Failed to initiate loading for any calibration models of type '{model_type}'. Failed: {', '.join(failed_models)}")
             Message(
                     text="Could not find or load the requested calibration model(s). Please check they exist in the plugin's 'calibration_model' folder.",
                     lifetime=10,

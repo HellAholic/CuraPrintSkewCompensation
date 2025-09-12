@@ -73,7 +73,6 @@ class SkewCalculator:
             if AD <= 0: raise ValueError("AD distance must be positive")
             self.marlin_I = (AC**2 - BD**2) / (4 * AD**2)
         except (ValueError, TypeError, ZeroDivisionError) as e:
-            Logger.log("w", f"Could not calculate Marlin I factor (XY): {e}. Using 0.0")
             self.marlin_I = 0.0
 
         try:
@@ -83,7 +82,6 @@ class SkewCalculator:
             if AD <= 0: raise ValueError("AD distance must be positive")
             self.marlin_J = (AC**2 - BD**2) / (4 * AD**2) if AD != 0 else 0.0
         except (ValueError, TypeError, ZeroDivisionError) as e:
-            Logger.log("w", f"Could not calculate Marlin J factor (XZ): {e}. Using 0.0")
             self.marlin_J = 0.0
 
         try:
@@ -93,10 +91,7 @@ class SkewCalculator:
             if AD <= 0: raise ValueError("AD distance must be positive")
             self.marlin_K = (AC**2 - BD**2) / (4 * AD**2) if AD != 0 else 0.0
         except (ValueError, TypeError, ZeroDivisionError) as e:
-            Logger.log("w", f"Could not calculate Marlin K factor (YZ): {e}. Using 0.0")
             self.marlin_K = 0.0
-
-        Logger.log("i", f"Calculated Marlin Factors: I={self.marlin_I:.8f}, J={self.marlin_J:.8f}, K={self.marlin_K:.8f}")
 
     def _calculate_skew_factor(self, ac: float, bd: float, ad: float) -> float:
         """

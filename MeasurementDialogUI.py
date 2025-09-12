@@ -320,5 +320,4 @@ class MeasurementDialogUI(QDialog):
                 lifetime=5,
                 title=catalog.i18n("[Print Skew Compensation]"),
                 message_type=Message.MessageType.NEUTRAL).show()
-        Logger.log("i", f"{PluginConstants.PLUGIN_ID}: MeasurementDialog rejected (Cancel clicked or closed).")
         super().reject()
