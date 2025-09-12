@@ -30,15 +30,12 @@ class GCodeManager:
         found_container = global_stack.findContainer(criteria={"id": printer_settings_container_id})
         if found_container and isinstance(found_container, InstanceContainer):
             settings_container = found_container
-            Logger.log("i", f"PrintSkewCompensation: Found settings container by ID: {printer_settings_container_id}")
         
         if not settings_container: # Fallback to top if no settings container found (less ideal but safe in terms of functionality)
-            self._logger.log("w", f"{self._plugin_id}: No specific settings container found, falling back to global stack top.")
             top_container = global_stack.getTop()
             if isinstance(top_container, InstanceContainer):
                 settings_container = top_container
             else:
-                self._logger.log("w", f"{self._plugin_id}: Top container in stack is not an InstanceContainer.")
                 return None
         
         return settings_container
@@ -57,19 +54,16 @@ class GCodeManager:
 
         global_stack = self._application.getGlobalContainerStack()
         if not global_stack:
-            self._logger.log("w", f"{self._plugin_id}: Could not get global container stack for G-code sync.")
             return
 
         settings_container = self._find_current_settings_container(global_stack)
         if not settings_container:
-            self._logger.log("w", f"{self._plugin_id}: Could not find a suitable settings container for G-code sync.")
             return
 
         try:
             # Get property from the global stack to ensure we get inherited values
             current_start_gcode = global_stack.getProperty(self._starg_gcode_key, "value")
             if current_start_gcode is None:
-                self._logger.log("w", f"{self._plugin_id}: '{self._starg_gcode_key}' is None in the global stack. Using empty string.")
                 current_start_gcode = ""
         except Exception as e:
              self._logger.logException("e", f"{self._plugin_id}: Error getting current start G-code from global stack: {e}")
@@ -137,11 +131,9 @@ class GCodeManager:
             new_start_gcode = "\n".join(new_gcode_lines)
             # Final check against original content, just in case logic above resulted in no net change
             if new_start_gcode != current_start_gcode:
-                self._logger.log("i", f"{self._plugin_id}: Synchronizing start G-code skew command. Added={command_added}, Removed={command_removed}")
                 try:
                     # Set the property in the found settings_container
                     settings_container.setProperty(self._starg_gcode_key, "value", new_start_gcode)
-                    self._logger.log("i", f"{self._plugin_id}: Successfully set start G-code in container '{settings_container.getId()}'.")
                 except Exception as e:
                     self._logger.logException("e", f"{self._plugin_id}: Error setting start G-code in container '{settings_container.getId()}': {e}")
             else:

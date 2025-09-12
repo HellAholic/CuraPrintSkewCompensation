@@ -61,14 +61,12 @@ class PrintSkewCompensationCKM(Script):
         """Reads printer settings from the plugin's configuration file for the given printer name."""
         cfg_path = self._get_printer_cfg_path(printer_name)
         if not os.path.exists(cfg_path):
-            Logger.log("w", f"{self.script_key}: Printer settings file does not exist: {cfg_path}. Using default settings.")
             return self._get_default_settings()
 
         config = configparser.ConfigParser()
         config.read(cfg_path)
 
         if 'settings' not in config:
-            Logger.log("w", f"{self.script_key}: No 'settings' section found in {cfg_path}. Using default settings.")
             return self._get_default_settings()
 
         settings = {k: v for k, v in config['settings'].items()}
@@ -117,7 +115,6 @@ class PrintSkewCompensationCKM(Script):
             try:
                 return float(str_value)
             except ValueError:
-                Logger.log("w", f"[{self.script_key}] Invalid float value for setting '{key_name}': '{str_value}'. Using None.")
                 return None
 
         xy_ac = get_float_setting("xy_ac_measurement")
@@ -131,11 +128,9 @@ class PrintSkewCompensationCKM(Script):
                     xy_bd,
                     xy_ad
                 )
-                Logger.log("i", f"[{self.script_key}] Calculated XY skew factor from configuration measurements: {self._calculated_factors['xy']}")
                 self._settings_source = "configuration (calculated)"
                 self.found_in_configuration = True
-            except Exception as e_xy_calc:
-                Logger.log("w", f"[{self.script_key}] Could not calculate XY factor from configuration measurements: {e_xy_calc}")
+            except Exception:
                 self._calculated_factors["xy"] = 0.0
         else:
              self._calculated_factors["xy"] = 0.0
@@ -152,13 +147,11 @@ class PrintSkewCompensationCKM(Script):
                     xz_bd,
                     xz_ad
                 )
-                Logger.log("i", f"[{self.script_key}] Calculated XZ skew factor from configuration measurements: {self._calculated_factors['xz']}")
                 # Don't overwrite settings_source if already set by XY
                 if self._settings_source == "configuration": self._settings_source = "configuration (calculated)" # Note: This condition might need review if settings_source can be None initially
                 elif self._settings_source is None: self._settings_source = "configuration (calculated)" # Ensure it's set if XY was skipped
                 self.found_in_configuration = True
             except Exception as e_xz_calc:
-                Logger.log("w", f"[{self.script_key}] Could not calculate XZ factor from configuration measurements: {e_xz_calc}")
                 self._calculated_factors["xz"] = 0.0
         else:
              self._calculated_factors["xz"] = 0.0
@@ -175,20 +168,17 @@ class PrintSkewCompensationCKM(Script):
                     yz_bd,
                     yz_ad
                 )
-                Logger.log("i", f"[{self.script_key}] Calculated YZ skew factor from configuration measurements: {self._calculated_factors['yz']}")
                 # Don't overwrite settings_source if already set by XY/XZ
                 if self._settings_source == "configuration": self._settings_source = "configuration (calculated)"
                 elif self._settings_source is None: self._settings_source = "configuration (calculated)" # Ensure it's set if XY/XZ were skipped
                 self.found_in_configuration = True
             except Exception as e_yz_calc:
-                Logger.log("w", f"[{self.script_key}] Could not calculate YZ factor from configuration measurements: {e_yz_calc}")
                 self._calculated_factors["yz"] = 0.0
         else:
              self._calculated_factors["yz"] = 0.0
 
         # If no factors were obtained from configuration, mark configurations as effectively disabled for factor calculation
         if not self.found_in_configuration and self._plugin_enabled:
-            Logger.log("w", f"[{self.script_key}] configuration enabled, but failed to calculate any skew factors from configuration measurements.")
             self._plugin_enabled = False # Treat as disabled for factor calculation purposes
         elif not self._plugin_enabled:
              # Ensure factors are zero if configurations were disabled from the start
@@ -264,15 +254,13 @@ class PrintSkewCompensationCKM(Script):
             if self._calculated_factors["yz"] != 0:
                 enable_yz_skew = True
             if enable_xy_skew or enable_xz_skew or enable_yz_skew:
-                Logger.log("i", f"[{self.script_key}] Using factors calculated from configuration: XY={self._calculated_factors['xy']:.8f}, XZ={self._calculated_factors['xz']:.8f}, YZ={self._calculated_factors['yz']:.8f}")
+                pass  # Using calculated factors silently
             else:
-                Logger.log("i", f"[{self.script_key}] configuration enabled, but no factors applied (Zero skew factor).")
                 Message(text="The post processor did not receive a non-zero value from the plugin.",
                         title=catalog.i18n("[Print Skew Compensation]"),
                         message_type=Message.MessageType.WARNING).show()
                 return data
         else:
-            Logger.log("w",f"[{self.script_key}] The Print Skew post script was unable to get the settings from the Cura plugin.")
             Message(text="The post processor did not receive the settings from the Plugin.",
                     title=catalog.i18n("[Print Skew Compensation]"),
                     message_type=Message.MessageType.ERROR).show()
